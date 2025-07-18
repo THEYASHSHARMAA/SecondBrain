@@ -23,6 +23,7 @@ const db_1 = require("./db");
 const zod_1 = __importDefault(require("zod"));
 const middleware_1 = require("./middleware");
 const app = (0, express_1.default)();
+const utils_1 = require("./utils");
 const JWT_SECRET = "dskjw21";
 // app.use(express.static());
 app.use(express_1.default.json());
@@ -102,8 +103,82 @@ app.get("/api/v1/content", middleware_1.authUserMid, (req, res) => __awaiter(voi
     const data = yield db_1.ContentModel.find({ userId: userID }).populate("userId", "username");
     res.json({ data });
 }));
-app.post("/api/v1/brain/share", (req, res) => { });
-app.get("/api/v1/brain/:shareLink", (req, res) => { });
+app.delete("/api/v1/content", middleware_1.authUserMid, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const contentID = req.body.contentId;
+    yield db_1.ContentModel.deleteOne({
+        contentID,
+        //@ts-ignore
+        userID: req.userId,
+    });
+    res.json({ message: "deleted" });
+}));
+app.post("/api/v1/brain/share", middleware_1.authUserMid, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const share = req.body.share;
+    try {
+        if (share) {
+            const existingLink = yield db_1.LinkModel.findOne({
+                //@ts-ignore
+                userId: req.id,
+            });
+            if (existingLink) {
+                return res.json({
+                    hash: existingLink.hash,
+                });
+            } //if not exists, create one
+            const hash = (0, utils_1.random)(10);
+            yield db_1.LinkModel.create({
+                //@ts-ignore
+                userId: req.id,
+                hash,
+            });
+            res.json({
+                msg: "Updated share link",
+                hash,
+            });
+        }
+        else {
+            yield db_1.LinkModel.deleteOne({
+                //@ts-ignore
+                userId: req.id,
+            });
+            res.json({
+                msg: "Link removed",
+            });
+        }
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ msg: "Something went wrong" });
+    }
+}));
+app.get("/api/v1/brain/:shareLink", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const hashLink = req.params.shareLink;
+    console.log(hashLink);
+    const link = yield db_1.LinkModel.findOne({ hash: hashLink });
+    console.log(link);
+    if (!link) {
+        return res.status(411).json({
+            msg: "Invalid link",
+        });
+    }
+    // here we fetch the alll content reltd to that link
+    const content = yield db_1.ContentModel.find({
+        userId: link.userId,
+    });
+    //now we fetch the user detail from userModel for username
+    const user = yield db_1.UserModel.findOne({
+        _id: link.userId,
+    });
+    if (!user) {
+        return res.status(411).json({
+            msg: "User not found",
+        });
+    }
+    res.json({
+        username: user.username,
+        content,
+    });
+}));
 app.listen(9000, () => {
     console.log("app is listen");
 });
